@@ -1,0 +1,97 @@
+#include "serial.hpp"
+
+#include "mapping.hpp"
+#include "usb/usb_cdc.h"
+
+using namespace ru::driver;
+
+namespace ru::driver {
+namespace {
+const stm32u5xx::cfg::usb_config* config(const SerialId id) noexcept {
+  switch (id) {
+#define RU_STM32U5XX_SERIAL_CASE(name, cfg) \
+    case SerialId::name:                    \
+      return &cfg;
+    RU_STM32U5XX_SERIAL_MAP(RU_STM32U5XX_SERIAL_CASE)
+#undef RU_STM32U5XX_SERIAL_CASE
+    default:
+      return nullptr;
+  }
+}
+
+const stm32u5xx::cfg::usb_config& usb_config() noexcept {
+  static constexpr stm32u5xx::cfg::usb_config k_default{
+      .task_priority = 3U,
+      .task_period = 1U,
+  };
+  const auto* const p_config = config(SerialId::USB);
+  return p_config != nullptr ? *p_config : k_default;
+}
+}  // namespace
+
+extern "C" uint32_t ru_stm32_usb_cdc_service_task_priority_get(void) {
+  return usb_config().task_priority;
+}
+
+extern "C" uint32_t ru_stm32_usb_cdc_service_task_period_get(void) {
+  return usb_config().task_period;
+}
+
+Serial::Serial(const SerialId id) noexcept : m_id(id), m_opaque() {
+}
+
+result Serial::start() noexcept {
+  return ru_stm32_usb_cdc_start() == 0 ? result::OK : result::RECOVERABLE_ERROR;
+}
+
+result Serial::init() noexcept {
+  return config(m_id) != nullptr ? m_opaque.init() : result::UNRECOVERABLE_ERROR;
+}
+
+result Serial::stop() noexcept {
+  return config(m_id) != nullptr ? m_opaque.stop() : result::UNRECOVERABLE_ERROR;
+}
+
+result Serial::write(const uint8_t* const p_data, const size_t len,
+                     const Timestamp timeout_uS) noexcept {
+  if (config(m_id) == nullptr || (p_data == nullptr && len != 0U)) {
+    return result::UNRECOVERABLE_ERROR;
+  }
+
+  return m_opaque.write(p_data, len, timeout_uS);
+}
+
+result Serial::read(uint8_t* const p_data, const size_t len,
+                    const Timestamp timeout_uS) noexcept {
+  if (config(m_id) == nullptr || (p_data == nullptr && len != 0U)) {
+    return result::UNRECOVERABLE_ERROR;
+  }
+
+  if (p_data == nullptr) {
+    return result::OK;
+  }
+
+  return m_opaque.read(p_data, len, timeout_uS);
+}
+
+result opaque_serial::init() noexcept {
+  return ru_stm32_usb_cdc_init() == 0 ? result::OK : result::RECOVERABLE_ERROR;
+}
+
+result opaque_serial::stop() noexcept {
+  return ru_stm32_usb_cdc_stop() == 0 ? result::OK : result::RECOVERABLE_ERROR;
+}
+
+result opaque_serial::write(const uint8_t* const p_data, const size_t len,
+                            const Timestamp timeout_uS) noexcept {
+  return ru_stm32_usb_cdc_write(p_data, len, timeout_uS) == 0
+             ? result::OK
+             : result::RECOVERABLE_ERROR;
+}
+
+result opaque_serial::read(uint8_t* const p_data, const size_t len,
+                           const Timestamp timeout_uS) noexcept {
+  return ru_stm32_usb_cdc_read(p_data, len, timeout_uS) == 0
+      ? result::OK : result::RECOVERABLE_ERROR;
+}
+}  // namespace ru::driver

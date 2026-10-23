@@ -1,0 +1,67 @@
+#pragma once
+
+#include "mapping_types.hpp"
+
+#ifndef RU_STM32U5XX_GPIO_MAP
+#define RU_STM32U5XX_GPIO_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_ADC_MAP
+#define RU_STM32U5XX_ADC_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_PWM_MAP
+#define RU_STM32U5XX_PWM_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_TIMER_MAP
+#define RU_STM32U5XX_TIMER_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_SERIAL_MAP
+#define RU_STM32U5XX_SERIAL_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_RTC_MAP
+#define RU_STM32U5XX_RTC_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_SDMMC_MAP
+#define RU_STM32U5XX_SDMMC_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_USBD_MSC_MAP
+#define RU_STM32U5XX_USBD_MSC_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_SPI_PROTO_MAP
+#define RU_STM32U5XX_SPI_PROTO_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_SPI_MAP
+#define RU_STM32U5XX_SPI_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_FLEX_CAN_MAP
+#define RU_STM32U5XX_FLEX_CAN_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_MULTI_CAN_MAP
+#define RU_STM32U5XX_MULTI_CAN_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_M_CAN_MAP
+#define RU_STM32U5XX_M_CAN_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_BX_CAN_MAP
+#define RU_STM32U5XX_BX_CAN_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_NV_MEMORY_MAP
+#define RU_STM32U5XX_NV_MEMORY_MAP(X)
+#endif
+
+#ifndef RU_STM32U5XX_WATCHDOG_MAP
+#define RU_STM32U5XX_WATCHDOG_MAP(X)
+#endif
