@@ -142,6 +142,55 @@ expected::expected<std::optional<uint16_t>, result> Adc::try_read() noexcept {
   return std::optional<uint16_t>{value};
 }
 
+expected::expected<adc_frame, adc_status> Adc::snapshot() noexcept {
+  const auto value = read();
+  if (!value.has_value()) {
+    return expected::unexpected(adc_status::HARDWARE_ERROR);
+  }
+
+  adc_frame frame{};
+  frame.sequence = 1U;
+  frame.samples_per_channel = 1U;
+  frame.channel_count = 1U;
+  frame.values[0] = value.value();
+  return frame;
+}
+
+expected::expected<std::optional<adc_frame>, adc_status> Adc::try_snapshot() noexcept {
+  const auto value = try_read();
+  if (!value.has_value()) {
+    return expected::unexpected(adc_status::HARDWARE_ERROR);
+  }
+  if (!value->has_value()) {
+    return std::optional<adc_frame>{};
+  }
+
+  adc_frame frame{};
+  frame.sequence = 1U;
+  frame.samples_per_channel = 1U;
+  frame.channel_count = 1U;
+  frame.values[0] = value->value();
+  return std::optional<adc_frame>{frame};
+}
+
+adc_status Adc::status() const noexcept {
+  return m_opaque.initialized() ? adc_status::OK : adc_status::NOT_INITIALIZED;
+}
+
+adc_init_diagnostic Adc::diagnostics() const noexcept {
+  adc_init_diagnostic diagnostic{};
+  diagnostic.status = status();
+  diagnostic.stage = diagnostic.status == adc_status::OK
+                         ? adc_init_stage::READY
+                         : adc_init_stage::NOT_STARTED;
+  if (m_opaque.instance() != nullptr) {
+    diagnostic.adc_instance = static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(m_opaque.instance()));
+  }
+  diagnostic.sequence_length = 1U;
+  return diagnostic;
+}
+
 uint16_t Adc::sample_max() const noexcept {
   return m_opaque.sample_max();
 }
