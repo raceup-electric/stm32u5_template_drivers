@@ -1,4 +1,12 @@
 set(_drivers_instance_dir "${CMAKE_CURRENT_LIST_DIR}")
+# These peripherals have no entries in the current U5 board mapping.  USB MSC
+# is also only an unsupported placeholder in this backend.
+set(DRIVERS_INSTANCE_EXCLUDED_SOURCES
+  rtc.cpp
+  sdmmc.cpp
+  spi.cpp
+  usbd_msc.cpp
+)
 include("${CMAKE_CURRENT_LIST_DIR}/../instance_layout.cmake")
 
 if(DEFINED STM32_DEVICE AND NOT STM32_DEVICE STREQUAL "STM32U545xx")
