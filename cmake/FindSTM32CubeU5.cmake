@@ -7,7 +7,7 @@ find_path(STM32CubeU5_HAL_SOURCE_DIR stm32u5xx_hal.c
   HINTS "${STM32CubeU5_ROOT}/Drivers/STM32U5xx_HAL_Driver/Src")
 find_path(STM32CubeU5_CMSIS_INCLUDE_DIR core_cm33.h
   HINTS "${STM32CubeU5_ROOT}/Drivers/CMSIS/Include")
-find_path(STM32CubeU5_CMSIS_DEVICE_INCLUDE_DIR stm32u545xx.h
+find_path(STM32CubeU5_CMSIS_DEVICE_INCLUDE_DIR stm32u5xx.h
   HINTS "${STM32CubeU5_ROOT}/Drivers/CMSIS/Device/ST/STM32U5xx/Include")
 set(STM32CubeU5_SYSTEM_SOURCE
   "${STM32CubeU5_ROOT}/Drivers/CMSIS/Device/ST/STM32U5xx/Source/Templates/system_stm32u5xx.c")

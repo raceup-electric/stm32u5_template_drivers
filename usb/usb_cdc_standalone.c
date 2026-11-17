@@ -41,7 +41,7 @@ typedef struct {
   uint8_t tx_buffer[RU_USB_CDC_STANDALONE_TX_BUFFER_SIZE];
 } ru_usb_cdc_standalone_context_t;
 
-PCD_HandleTypeDef hpcd_USB_DRD_FS __attribute__((weak));
+PCD_HandleTypeDef RU_STM32_USB_HANDLE __attribute__((weak));
 
 static ru_usb_cdc_standalone_context_t g_usb_cdc_standalone = {
     .line_coding =
@@ -238,7 +238,7 @@ int ru_stm32_usb_cdc_standalone_stack_only_start(void) {
   }
 
   memset(&parameter, 0, sizeof(parameter));
-  memset(&hpcd_USB_DRD_FS, 0, sizeof(hpcd_USB_DRD_FS));
+  memset(&RU_STM32_USB_HANDLE, 0, sizeof(RU_STM32_USB_HANDLE));
   ru_usb_build_string_framework();
 
   if (ux_system_initialize(g_usbx_memory, sizeof(g_usbx_memory), UX_NULL, 0U) !=
@@ -271,34 +271,54 @@ int ru_stm32_usb_cdc_standalone_stack_only_start(void) {
 }
 
 static int ru_usb_cdc_standalone_configure_pcd(void) {
-  hpcd_USB_DRD_FS.Instance = USB_DRD_FS;
-  hpcd_USB_DRD_FS.Init.dev_endpoints = 8U;
-  hpcd_USB_DRD_FS.Init.speed = PCD_SPEED_FULL;
-  hpcd_USB_DRD_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
-  hpcd_USB_DRD_FS.Init.Sof_enable = DISABLE;
-  hpcd_USB_DRD_FS.Init.low_power_enable = DISABLE;
-  hpcd_USB_DRD_FS.Init.lpm_enable = DISABLE;
-  hpcd_USB_DRD_FS.Init.battery_charging_enable = DISABLE;
-  hpcd_USB_DRD_FS.Init.vbus_sensing_enable = DISABLE;
-  hpcd_USB_DRD_FS.Init.bulk_doublebuffer_enable = DISABLE;
-  hpcd_USB_DRD_FS.Init.iso_singlebuffer_enable = DISABLE;
+  RU_STM32_USB_HANDLE.Instance = RU_STM32_USB_INSTANCE;
+  RU_STM32_USB_HANDLE.Init.dev_endpoints = 8U;
+#if defined(STM32U595xx)
+  RU_STM32_USB_HANDLE.Init.speed = PCD_SPEED_HIGH;
+  RU_STM32_USB_HANDLE.Init.phy_itface = USB_OTG_HS_EMBEDDED_PHY;
+#else
+  RU_STM32_USB_HANDLE.Init.speed = PCD_SPEED_FULL;
+  RU_STM32_USB_HANDLE.Init.phy_itface = PCD_PHY_EMBEDDED;
+#endif
+  RU_STM32_USB_HANDLE.Init.Sof_enable = DISABLE;
+  RU_STM32_USB_HANDLE.Init.low_power_enable = DISABLE;
+  RU_STM32_USB_HANDLE.Init.lpm_enable = DISABLE;
+  RU_STM32_USB_HANDLE.Init.battery_charging_enable = DISABLE;
+  RU_STM32_USB_HANDLE.Init.vbus_sensing_enable = DISABLE;
+#if defined(STM32U585xx) || defined(STM32U595xx)
+  RU_STM32_USB_HANDLE.Init.use_dedicated_ep1 = DISABLE;
+  RU_STM32_USB_HANDLE.Init.dma_enable = DISABLE;
+#else
+  RU_STM32_USB_HANDLE.Init.bulk_doublebuffer_enable = DISABLE;
+  RU_STM32_USB_HANDLE.Init.iso_singlebuffer_enable = DISABLE;
+#endif
 
-  if (HAL_PCD_Init(&hpcd_USB_DRD_FS) != HAL_OK) {
+  if (HAL_PCD_Init(&RU_STM32_USB_HANDLE) != HAL_OK) {
     return -1;
   }
 
-  if (HAL_PCDEx_PMAConfig(&hpcd_USB_DRD_FS, 0x00U, PCD_SNG_BUF, 0x20U) !=
+#if defined(STM32U545xx)
+  if (HAL_PCDEx_PMAConfig(&RU_STM32_USB_HANDLE, 0x00U, PCD_SNG_BUF, 0x20U) !=
           HAL_OK ||
-      HAL_PCDEx_PMAConfig(&hpcd_USB_DRD_FS, 0x80U, PCD_SNG_BUF, 0x60U) !=
+      HAL_PCDEx_PMAConfig(&RU_STM32_USB_HANDLE, 0x80U, PCD_SNG_BUF, 0x60U) !=
           HAL_OK ||
-      HAL_PCDEx_PMAConfig(&hpcd_USB_DRD_FS, 0x81U, PCD_SNG_BUF, 0xA0U) !=
+      HAL_PCDEx_PMAConfig(&RU_STM32_USB_HANDLE, 0x81U, PCD_SNG_BUF, 0xA0U) !=
           HAL_OK ||
-      HAL_PCDEx_PMAConfig(&hpcd_USB_DRD_FS, 0x02U, PCD_SNG_BUF, 0xE0U) !=
+      HAL_PCDEx_PMAConfig(&RU_STM32_USB_HANDLE, 0x02U, PCD_SNG_BUF, 0xE0U) !=
           HAL_OK ||
-      HAL_PCDEx_PMAConfig(&hpcd_USB_DRD_FS, 0x83U, PCD_SNG_BUF, 0x120U) !=
+      HAL_PCDEx_PMAConfig(&RU_STM32_USB_HANDLE, 0x83U, PCD_SNG_BUF, 0x120U) !=
           HAL_OK) {
     return -1;
   }
+#else
+  if (HAL_PCDEx_SetRxFiFo(&RU_STM32_USB_HANDLE, 0x80U) != HAL_OK ||
+      HAL_PCDEx_SetTxFiFo(&RU_STM32_USB_HANDLE, 0U, 0x40U) != HAL_OK ||
+      HAL_PCDEx_SetTxFiFo(&RU_STM32_USB_HANDLE, 1U, 0x80U) != HAL_OK ||
+      HAL_PCDEx_SetTxFiFo(&RU_STM32_USB_HANDLE, 2U, 0x20U) != HAL_OK ||
+      HAL_PCDEx_SetTxFiFo(&RU_STM32_USB_HANDLE, 3U, 0x40U) != HAL_OK) {
+    return -1;
+  }
+#endif
 
   return 0;
 }
@@ -312,8 +332,8 @@ int ru_stm32_usb_cdc_standalone_dcd_only_start(void) {
     return -1;
   }
 
-  if (_ux_dcd_stm32_initialize((ULONG)USB_DRD_FS,
-                               (ULONG)&hpcd_USB_DRD_FS) != UX_SUCCESS) {
+  if (_ux_dcd_stm32_initialize((ULONG)RU_STM32_USB_INSTANCE,
+                               (ULONG)&RU_STM32_USB_HANDLE) != UX_SUCCESS) {
     return -1;
   }
 
@@ -325,7 +345,7 @@ int ru_stm32_usb_cdc_standalone_start(void) {
     return -1;
   }
 
-  if (HAL_PCD_Start(&hpcd_USB_DRD_FS) != HAL_OK) {
+  if (HAL_PCD_Start(&RU_STM32_USB_HANDLE) != HAL_OK) {
     return -1;
   }
 

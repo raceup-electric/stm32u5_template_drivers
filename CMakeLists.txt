@@ -9,8 +9,10 @@ set(DRIVERS_INSTANCE_EXCLUDED_SOURCES
 )
 include("${CMAKE_CURRENT_LIST_DIR}/../instance_layout.cmake")
 
-if(DEFINED STM32_DEVICE AND NOT STM32_DEVICE STREQUAL "STM32U545xx")
-  message(FATAL_ERROR "stm32u5xx: this backend targets STM32U545xx, not ${STM32_DEVICE}")
+if(NOT DEFINED STM32_DEVICE OR NOT STM32_DEVICE MATCHES "^STM32U(545|585|595)xx$")
+  message(FATAL_ERROR
+    "stm32u5xx: unsupported or missing STM32_DEVICE='${STM32_DEVICE}'; "
+    "expected STM32U545xx, STM32U585xx, or STM32U595xx")
 endif()
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 find_package(STM32CubeU5 REQUIRED MODULE)
@@ -33,7 +35,7 @@ if(NOT TARGET device_hal)
   target_include_directories(device_hal SYSTEM PUBLIC
     "${STM32CubeU5_HAL_INCLUDE_DIR}" "${STM32CubeU5_CMSIS_INCLUDE_DIR}"
     "${STM32CubeU5_CMSIS_DEVICE_INCLUDE_DIR}")
-  target_compile_definitions(device_hal PUBLIC USE_HAL_DRIVER STM32U545xx)
+  target_compile_definitions(device_hal PUBLIC USE_HAL_DRIVER ${STM32_DEVICE})
 endif()
 
 file(GLOB _u5_usbx_core CONFIGURE_DEPENDS "${STM32_USBX_ROOT}/common/core/src/*.c")
@@ -46,7 +48,6 @@ list(APPEND DRIVERS_INSTANCE_SOURCES
   "${STM32_EEPROM_EMULATION_ROOT}/core/algo/eeprom_algo_flitf.c"
   "${CMAKE_CURRENT_LIST_DIR}/usb/usb_cdc_standalone.c"
   "${CMAKE_CURRENT_LIST_DIR}/usb/ux_standalone_support.c"
-  "${CMAKE_CURRENT_LIST_DIR}/usb/usb_irq.c"
   ${_u5_usbx_core} ${_u5_usbx_cdc} ${_u5_usbx_dcd})
 list(APPEND DRIVERS_INSTANCE_PUBLIC_INCLUDE_DIRS
   "${CMAKE_CURRENT_LIST_DIR}" "${CMAKE_CURRENT_LIST_DIR}/config")
@@ -64,9 +65,9 @@ list(APPEND DRIVERS_INSTANCE_SYSTEM_PRIVATE_INCLUDE_DIRS
   "${STM32_USBX_ROOT}/common/usbx_stm32_device_controllers"
   "${STM32_USBX_ROOT}/ports/cortex_m4/gnu/inc")
 list(APPEND DRIVERS_INSTANCE_COMPILE_DEFINITIONS
-  USE_HAL_DRIVER STM32U545xx UX_INCLUDE_USER_DEFINE_FILE)
+  USE_HAL_DRIVER ${STM32_DEVICE} UX_INCLUDE_USER_DEFINE_FILE)
 # Public because the opaque headers expose HAL types and need its device macro.
-add_library(drivers_stm32u545_config INTERFACE)
-target_compile_definitions(drivers_stm32u545_config INTERFACE USE_HAL_DRIVER STM32U545xx)
-list(APPEND DRIVERS_INSTANCE_PUBLIC_LINK_LIBRARIES device_hal drivers_stm32u545_config)
+add_library(drivers_stm32u5_config INTERFACE)
+target_compile_definitions(drivers_stm32u5_config INTERFACE USE_HAL_DRIVER ${STM32_DEVICE})
+list(APPEND DRIVERS_INSTANCE_PUBLIC_LINK_LIBRARIES device_hal drivers_stm32u5_config)
 list(APPEND DRIVERS_INSTANCE_PRIVATE_LINK_LIBRARIES freertos_kernel)

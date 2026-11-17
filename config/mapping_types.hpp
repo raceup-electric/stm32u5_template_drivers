@@ -16,6 +16,17 @@ enum class adc_dma_backend {
   fixed_window_average,
 };
 
+enum class adc_acquisition_mode {
+  polling,
+  free_running,
+  timer_triggered,
+};
+
+enum class adc_dma_data_width {
+  halfword,
+  word,
+};
+
 inline constexpr uint32_t kDefaultAdcPollTimeoutMs = 2U;
 inline constexpr uint16_t kDefaultAdcSampleMax = 4095U;
 
@@ -37,38 +48,30 @@ struct gpio_config {
   }
 };
 
-struct adc_config {
+struct adc_pipeline_config {
   uintptr_t instance_base;
-  uintptr_t port_base;
-  GPIO_InitTypeDef pin_init;
   ADC_InitTypeDef init;
-  ADC_ChannelConfTypeDef channel_init;
-  ADC_InjectionConfTypeDef injected_channel_init;
-  uint32_t polling_timeout_ms;
-  uint16_t sample_max;
-  const ADC_ChannelConfTypeDef* dma_channel_sequence;
-  std::size_t dma_channel_sequence_length;
-  std::size_t dma_sequence_index;
-  bool uses_dma;
-  bool uses_injected;
+  const ADC_ChannelConfTypeDef* channel_sequence;
+  std::size_t channel_sequence_length;
+  adc_acquisition_mode acquisition_mode;
   std::size_t dma_frame_count;
   adc_dma_backend dma_backend;
   std::size_t dma_window_width;
+  std::size_t dma_window_hop;
+  adc_dma_data_width dma_source_width;
   uint32_t dma_request;
   uintptr_t dma_channel_base;
   IRQn_Type dma_irq;
   uintptr_t trigger_timer_instance_base;
   uint32_t trigger_counter_clock_hz;
   uint32_t trigger_frequency_hz;
+  uint32_t adc_trigger;
+  uint32_t adc_trigger_edge;
   TIM_Base_InitTypeDef trigger_timer_init;
   TIM_MasterConfigTypeDef trigger_master_config;
 
   ADC_TypeDef* instance() const noexcept {
     return reinterpret_cast<ADC_TypeDef*>(instance_base);
-  }
-
-  GPIO_TypeDef* port() const noexcept {
-    return reinterpret_cast<GPIO_TypeDef*>(port_base);
   }
 
   DMA_Channel_TypeDef* dma_channel() const noexcept {
@@ -79,118 +82,156 @@ struct adc_config {
     return reinterpret_cast<TIM_TypeDef*>(trigger_timer_instance_base);
   }
 
-  bool uses_timer_trigger() const noexcept {
-    return trigger_timer_instance_base != 0U;
+  bool uses_dma() const noexcept {
+    return dma_frame_count != 0U;
   }
 
-  static constexpr adc_config polling_config(
-      const uintptr_t instance_base, const uintptr_t port_base,
-      const GPIO_InitTypeDef& pin_init, const ADC_InitTypeDef& init,
-      const ADC_ChannelConfTypeDef& channel_init,
-      const uint32_t polling_timeout_ms = kDefaultAdcPollTimeoutMs) noexcept {
-    return adc_config{
+  bool uses_timer_trigger() const noexcept {
+    return acquisition_mode == adc_acquisition_mode::timer_triggered;
+  }
+
+  static constexpr adc_pipeline_config polling(
+      const uintptr_t instance_base, const ADC_InitTypeDef& init,
+      const ADC_ChannelConfTypeDef* channel_sequence,
+      const std::size_t channel_sequence_length) noexcept {
+    return adc_pipeline_config{
         .instance_base = instance_base,
-        .port_base = port_base,
-        .pin_init = pin_init,
         .init = init,
-        .channel_init = channel_init,
-        .injected_channel_init = {},
-        .polling_timeout_ms = polling_timeout_ms,
-        .sample_max = kDefaultAdcSampleMax,
-        .dma_channel_sequence = nullptr,
-        .dma_channel_sequence_length = 0U,
-        .dma_sequence_index = 0U,
-        .uses_dma = false,
-        .uses_injected = false,
+        .channel_sequence = channel_sequence,
+        .channel_sequence_length = channel_sequence_length,
+        .acquisition_mode = adc_acquisition_mode::polling,
         .dma_frame_count = 0U,
         .dma_backend = adc_dma_backend::average_since_read,
         .dma_window_width = 0U,
+        .dma_window_hop = 0U,
+        .dma_source_width = adc_dma_data_width::halfword,
         .dma_request = 0U,
         .dma_channel_base = 0U,
         .dma_irq = static_cast<IRQn_Type>(0),
         .trigger_timer_instance_base = 0U,
         .trigger_counter_clock_hz = 0U,
         .trigger_frequency_hz = 0U,
+        .adc_trigger = ADC_SOFTWARE_START,
+        .adc_trigger_edge = ADC_EXTERNALTRIGCONVEDGE_NONE,
         .trigger_timer_init = {},
         .trigger_master_config = {},
     };
   }
 
-  static constexpr adc_config dma_config(
-      const uintptr_t instance_base, const uintptr_t port_base,
-      const GPIO_InitTypeDef& pin_init, const ADC_InitTypeDef& init,
-      const ADC_ChannelConfTypeDef& channel_init, const std::size_t dma_frame_count,
-      const uint32_t dma_request, const uintptr_t dma_channel_base,
-      const IRQn_Type dma_irq,
+  static constexpr adc_pipeline_config dma(
+      const uintptr_t instance_base, const ADC_InitTypeDef& init,
+      const ADC_ChannelConfTypeDef* channel_sequence,
+      const std::size_t channel_sequence_length,
+      const std::size_t dma_frame_count, const uint32_t dma_request,
+      const uintptr_t dma_channel_base, const IRQn_Type dma_irq,
       const adc_dma_backend dma_backend = adc_dma_backend::average_since_read,
       const std::size_t dma_window_width = 0U,
-      const ADC_ChannelConfTypeDef* dma_channel_sequence = nullptr,
-      const std::size_t dma_channel_sequence_length = 0U,
-      const std::size_t dma_sequence_index = 0U,
+      const std::size_t dma_window_hop = 0U,
+      const adc_acquisition_mode acquisition_mode =
+          adc_acquisition_mode::free_running,
       const uintptr_t trigger_timer_instance_base = 0U,
       const uint32_t trigger_counter_clock_hz = 0U,
       const uint32_t trigger_frequency_hz = 0U,
+      const uint32_t adc_trigger = ADC_SOFTWARE_START,
+      const uint32_t adc_trigger_edge = ADC_EXTERNALTRIGCONVEDGE_NONE,
       const TIM_Base_InitTypeDef& trigger_timer_init = {},
-      const TIM_MasterConfigTypeDef& trigger_master_config = {}) noexcept {
-    return adc_config{
+      const TIM_MasterConfigTypeDef& trigger_master_config = {},
+      const adc_dma_data_width dma_source_width =
+          adc_dma_data_width::halfword) noexcept {
+    return adc_pipeline_config{
         .instance_base = instance_base,
-        .port_base = port_base,
-        .pin_init = pin_init,
         .init = init,
-        .channel_init = channel_init,
-        .injected_channel_init = {},
-        .polling_timeout_ms = 0U,
-        .sample_max = kDefaultAdcSampleMax,
-        .dma_channel_sequence = dma_channel_sequence,
-        .dma_channel_sequence_length = dma_channel_sequence_length,
-        .dma_sequence_index = dma_sequence_index,
-        .uses_dma = true,
-        .uses_injected = false,
+        .channel_sequence = channel_sequence,
+        .channel_sequence_length = channel_sequence_length,
+        .acquisition_mode = acquisition_mode,
         .dma_frame_count = dma_frame_count,
         .dma_backend = dma_backend,
         .dma_window_width = dma_window_width,
+        .dma_window_hop = dma_window_hop,
+        .dma_source_width = dma_source_width,
         .dma_request = dma_request,
         .dma_channel_base = dma_channel_base,
         .dma_irq = dma_irq,
         .trigger_timer_instance_base = trigger_timer_instance_base,
         .trigger_counter_clock_hz = trigger_counter_clock_hz,
         .trigger_frequency_hz = trigger_frequency_hz,
+        .adc_trigger = adc_trigger,
+        .adc_trigger_edge = adc_trigger_edge,
         .trigger_timer_init = trigger_timer_init,
         .trigger_master_config = trigger_master_config,
     };
   }
+};
+
+struct adc_config {
+  const adc_pipeline_config* pipeline;
+  uintptr_t port_base;
+  GPIO_InitTypeDef pin_init;
+  ADC_ChannelConfTypeDef channel_init;
+  ADC_InjectionConfTypeDef injected_channel_init;
+  uint32_t polling_timeout_ms;
+  uint16_t sample_max;
+  std::size_t sequence_index;
+  bool uses_injected;
+
+  GPIO_TypeDef* port() const noexcept {
+    return reinterpret_cast<GPIO_TypeDef*>(port_base);
+  }
+
+  static constexpr adc_config polling_config(
+      const adc_pipeline_config& pipeline, const uintptr_t port_base,
+      const GPIO_InitTypeDef& pin_init,
+      const ADC_ChannelConfTypeDef& channel_init,
+      const uint32_t polling_timeout_ms = kDefaultAdcPollTimeoutMs,
+      const uint16_t sample_max = kDefaultAdcSampleMax) noexcept {
+    return adc_config{
+        .pipeline = &pipeline,
+        .port_base = port_base,
+        .pin_init = pin_init,
+        .channel_init = channel_init,
+        .injected_channel_init = {},
+        .polling_timeout_ms = polling_timeout_ms,
+        .sample_max = sample_max,
+        .sequence_index = 0U,
+        .uses_injected = false,
+    };
+  }
+
+  static constexpr adc_config dma_config(
+      const adc_pipeline_config& pipeline, const uintptr_t port_base,
+      const GPIO_InitTypeDef& pin_init,
+      const ADC_ChannelConfTypeDef& channel_init,
+      const std::size_t sequence_index,
+      const uint16_t sample_max = kDefaultAdcSampleMax) noexcept {
+    return adc_config{
+        .pipeline = &pipeline,
+        .port_base = port_base,
+        .pin_init = pin_init,
+        .channel_init = channel_init,
+        .injected_channel_init = {},
+        .polling_timeout_ms = 0U,
+        .sample_max = sample_max,
+        .sequence_index = sequence_index,
+        .uses_injected = false,
+    };
+  }
 
   static constexpr adc_config injected_config(
-      const uintptr_t instance_base, const uintptr_t port_base,
+      const adc_pipeline_config& pipeline, const uintptr_t port_base,
       const GPIO_InitTypeDef& pin_init,
       const ADC_InjectionConfTypeDef& injected_channel_init,
       const uint16_t sample_max,
       const uint32_t polling_timeout_ms = kDefaultAdcPollTimeoutMs) noexcept {
     return adc_config{
-        .instance_base = instance_base,
+        .pipeline = &pipeline,
         .port_base = port_base,
         .pin_init = pin_init,
-        .init = {},
         .channel_init = {},
         .injected_channel_init = injected_channel_init,
         .polling_timeout_ms = polling_timeout_ms,
         .sample_max = sample_max,
-        .dma_channel_sequence = nullptr,
-        .dma_channel_sequence_length = 0U,
-        .dma_sequence_index = 0U,
-        .uses_dma = false,
+        .sequence_index = 0U,
         .uses_injected = true,
-        .dma_frame_count = 0U,
-        .dma_backend = adc_dma_backend::average_since_read,
-        .dma_window_width = 0U,
-        .dma_request = 0U,
-        .dma_channel_base = 0U,
-        .dma_irq = static_cast<IRQn_Type>(0),
-        .trigger_timer_instance_base = 0U,
-        .trigger_counter_clock_hz = 0U,
-        .trigger_frequency_hz = 0U,
-        .trigger_timer_init = {},
-        .trigger_master_config = {},
     };
   }
 };

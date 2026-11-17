@@ -1,9 +1,10 @@
-# Driver STM32U545CET6Q
+# Driver STM32U5xx
 
-Backend `stm32u5xx`, specifico per `STM32U545xx`, derivato dall'istanza H5
+Backend `stm32u5xx`, condiviso dalle istanze STM32U5, derivato dall’istanza H5
 (commit `b883468ac93ddef9792f2a7635c473e405549ba1`) e adattato alle HAL U5.
-È una libreria di driver: startup, linker script, configurazione TrustZone,
-clock e collegamenti della scheda appartengono al progetto firmware.
+È una libreria di driver: startup, linker script, configurazione TrustZone e
+collegamenti della scheda appartengono al progetto firmware; il clock comune
+U5 è configurato dal backend, come per le istanze H5 e H7.
 
 ## Integrazione
 
@@ -11,10 +12,10 @@ Prima di `add_subdirectory(lib/drivers)`:
 
 ```cmake
 set(DRIVERS_INSTANCE stm32u5xx)
-set(STM32_DEVICE STM32U545xx)
+set(STM32_DEVICE STM32U585xx) # or STM32U545xx / STM32U595xx
 set(DRIVER_IDS_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/config/drivers/ids")
 set(DRIVERS_MAPPING_FILE
-    "${PROJECT_SOURCE_DIR}/config/drivers/mappings/stm32/stm32u5xx/stm32u545cet6q/mapping.hpp")
+    "${PROJECT_SOURCE_DIR}/config/drivers/mappings/stm32/stm32u5xx/<device>/mapping.hpp")
 set(STM32CubeU5_ROOT "/percorso/STM32CubeU5" CACHE PATH "")
 set(STM32_EEPROM_EMULATION_ROOT "/percorso/stm32-util-eeprom-emulation" CACHE PATH "")
 add_subdirectory(lib/drivers)
@@ -34,34 +35,42 @@ passare separatamente `STM32CubeU5_HAL_INCLUDE_DIR`,
 
 Se non esiste `device_hal`, il backend lo crea. Se viene fornito dal progetto,
 deve contenere i moduli U5 elencati nel CMake del backend, con la stessa
-configurazione HAL. Le definizioni `STM32U545xx` e `USE_HAL_DRIVER` vengono
-propagate ai consumatori. Non vengono scaricate dipendenze durante CMake.
+configurazione HAL. La definizione `STM32U5*xx` del dispositivo selezionato e
+`USE_HAL_DRIVER` vengono propagate ai consumatori. Non vengono scaricate
+dipendenze durante CMake.
 
-Implementare `ru::driver::stm32u5xx::configure_board() noexcept`, dichiarata in
-`config/board_support.hpp`: `Common::start()` la chiama dopo `HAL_Init()`.
-Configurare alimentazione, clock di sistema/periferica, GPIO alternativi e
-callback MSP. Non esiste un clock HSE presunto né un fallback a 250 MHz.
-Usare startup e `system_stm32u5xx.c` ufficiali per STM32U545xx; gestire SysTick
-in modo che HAL e FreeRTOS continuino entrambi a ricevere i tick.
+`Common::start()` esegue `HAL_Init()` e configura alimentazione e clock comuni
+del dispositivo selezionato. Il progetto firmware deve fornire soltanto i
+callback MSP e il mapping dei pin della scheda. L'U595 abilita inoltre HSE per
+il riferimento del proprio USB HS PHY; SYSCLK resta derivato da HSI/PLL1.
+Usare lo startup e `system_stm32u5xx.c` ufficiali per il dispositivo
+selezionato; gestire SysTick in modo che HAL e FreeRTOS continuino entrambi a
+ricevere i tick.
 
 Il mapping usa `ru::driver::stm32u5xx::cfg` e macro `RU_STM32U5XX_*_MAP(X)`.
 Definire le configurazioni `inline constexpr`, poi includere
 `mapping_defaults.hpp`. I mapping predefiniti sono vuoti: non assegnano pin
-arbitrari. Selezionare pin e alternate function disponibili nel package LQFP48.
+arbitrari. Selezionare pin e alternate function disponibili nel package della
+scheda.
 Una sola configurazione deve possedere ciascuna periferica hardware; gli accessi
 concorrenti alla stessa periferica devono essere serializzati dall'applicazione.
 
 ## Periferiche
 
 - GPIO, PWM TIM/LPTIM e timer: clock dei bus U5; riconoscimento dei timer a 32 bit.
+  Il calcolo PWM usa l'intero intervallo autoreload (`ARR + 1`) e limita il
+  compare al valore massimo valido.
   I timestamp dei timer sono in microsecondi e ripartono da zero al wrap del
   contatore hardware. I timer condivisi tra PWM, ADC trigger e Timer richiedono
   assegnazioni compatibili da parte della scheda.
-- ADC1/ADC4: polling e DMA circolare GPDMA; canali injected solo ADC1.
-  Configurare risoluzione e `sample_max` coerentemente (default 4095).
-  I DMA devono usare GPDMA1 canali 0–7 e la relativa IRQ/request corretta.
-  Gli handler forniti instradano per canale. Per condividere gli handler con
-  altre periferiche, definire `RU_STM32U5XX_EXTERNAL_DMA_IRQ_HANDLERS` e chiamare
+- ADC1/ADC2/ADC4: polling e DMA circolare GPDMA. ADC2 è presente solo nei
+  dispositivi U59x; i canali injected sono disponibili su ADC1/ADC2, non ADC4.
+  Configurare risoluzione, `sample_max` e larghezza DMA coerentemente con
+  l'ADC selezionato (ADC1/ADC2 sono 14 bit, ADC4 è 12 bit).
+  I DMA devono usare una request ADC valida e una coppia canale/IRQ GPDMA1
+  coerente; il backend verifica i canali 0–15. Gli handler forniti instradano
+  per canale. Per condividerli con altre periferiche, definire
+  `RU_STM32U5XX_EXTERNAL_DMA_IRQ_HANDLERS` e chiamare
   `ru::driver::adc_dma_channel_irq(channel)` dagli handler del firmware.
 - CAN: FDCAN1; le API M_can/Bx_can/Flex_can/Multi_can condividono il controller.
   I timestamp RX sono convertiti in microsecondi e mantengono il wrap del
@@ -80,11 +89,13 @@ concorrenti alla stessa periferica devono essere serializzati dall'applicazione.
   recuperabile quando è già avviato.
 - USB Mass Storage non è implementato: restituisce `UNRECOVERABLE_ERROR`.
 
-USB richiede `HAL_PCD_MspInit/DeInit` della scheda: clock USB a 48 MHz,
-alimentazione VDDUSB, clock `__HAL_RCC_USB_FS_CLK_ENABLE()` e IRQ
-`USB_DRD_FS_IRQn`. L'handler USB è fornito in `usb/usb_irq.c`:
-non definirne un secondo. USBX usa il port C GNU cortex_m4, comune ai tipi
-Cortex-M in modalità standalone, e le primitive CMSIS di `ux_standalone_support.c`.
+Il backend fornisce `stm32u5xx_hal_msp.c` e `stm32u5xx_it.c`, come il backend
+H5: configurano la parte comune del controller USB, l'alimentazione e l'IRQ
+specifici del dispositivo (USB_DRD_FS su U545, OTG_FS su U585 e OTG_HS con
+PHY su U595). Il mapping del progetto deve fornire solo le configurazioni
+specifiche della scheda quando necessarie; non aggiungere un secondo handler
+USB. USBX usa il port C GNU cortex_m4, comune ai tipi Cortex-M in modalità
+standalone, e le primitive CMSIS di `ux_standalone_support.c`.
 
 ## EEPROM emulata
 
@@ -98,7 +109,8 @@ cartella del mapping con:
 
 Usare indirizzi numerici realmente riservati nel linker script. Sono richiesti
 allineamento a pagine da 8 KiB e spazio sufficiente per l'algoritmo (32 KiB con
-40 variabili e i default correnti). Il backend verifica i limiti dei 512 KiB,
+40 variabili e i default correnti). Il backend verifica i limiti della flash
+del dispositivo selezionato,
 la dimensione della regione e ogni operazione; richiede dual bank abilitato e
 gestisce bank swap. Scrive quadword da 16 byte ed elimina pagine, non settori H5.
 La regione deve essere accessibile al dominio di sicurezza del firmware.
@@ -107,7 +119,8 @@ Il backend `FlashRegion` non è implementato; usare `EmulatedEeprom`.
 
 ## Verifica
 
-Compilazione ARM con `STM32U545xx`, HAL/CMSIS ufficiali, C++20, USBX e algoritmo
+Compilazione ARM con la macro del dispositivo STM32U5 selezionato, HAL/CMSIS
+ufficiali, C++20, USBX e algoritmo
 EEPROM; compilazione con mapping vuoti e popolati, incluso ADC DMA; controllo
 del collegamento degli oggetti per simboli duplicati.
 
@@ -119,7 +132,6 @@ Questa verifica non sostituisce una prova sulla scheda: clock, pin, USB,
 conversioni ADC/DMA, timing CAN e persistenza dopo interruzione di alimentazione
 richiedono validazione hardware.
 
-Riferimenti ST: [STM32U545CE](https://www.st.com/en/microcontrollers-microprocessors/stm32u545ce.html),
-[datasheet](https://www.st.com/resource/en/datasheet/stm32u545ce.pdf),
+Riferimenti ST: [STM32U5 series](https://www.st.com/en/microcontrollers-microprocessors/stm32u5-series.html),
 [HAL U5](https://github.com/STMicroelectronics/stm32u5xx-hal-driver),
 [CMSIS U5](https://github.com/STMicroelectronics/cmsis-device-u5).

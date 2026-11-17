@@ -6,7 +6,7 @@
 #include "eeprom_emul_conf.h"
 
 namespace {
-constexpr uint32_t k_flash_end = FLASH_BASE + 512U * 1024U;
+constexpr uint32_t k_flash_end = FLASH_BASE + FLASH_SIZE_DEFAULT;
 constexpr uint32_t k_region_start = RU_STM32U5XX_EEPROM_START_PAGE_ADDRESS;
 constexpr uint32_t k_region_end = RU_STM32U5XX_EEPROM_END_ADDRESS;
 static_assert(k_region_start >= FLASH_BASE && k_region_end <= k_flash_end);

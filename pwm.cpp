@@ -32,8 +32,9 @@ overloaded(Ts...) -> overloaded<Ts...>;
 
 constexpr uint32_t pwm_pulse(const uint32_t period,
                              const uint16_t duty_cycle_permille) noexcept {
-  return static_cast<uint32_t>(((static_cast<uint64_t>(period) + 1U) *
-                                duty_cycle_permille) / 1000U);
+  const auto pulse = static_cast<uint32_t>(
+      ((static_cast<uint64_t>(period) + 1U) * duty_cycle_permille) / 1000U);
+  return std::min(pulse, period);
 }
 
 constexpr uint32_t pwm_channel_enable_mask(const uint32_t channel) noexcept {
@@ -64,7 +65,7 @@ uint32_t pwm_prescaler(const TIM_TypeDef* instance,
   const auto target_period_ticks =
       std::max<uint64_t>(timer_clock_hz / frequency_hz, 1ULL);
   const auto max_period_ticks =
-      static_cast<uint64_t>(timer_auto_reload_max(instance));
+      static_cast<uint64_t>(timer_auto_reload_max(instance)) + 1ULL;
   const auto prescaler_div =
       std::max<uint64_t>((target_period_ticks + max_period_ticks - 1ULL) /
                              max_period_ticks,
@@ -82,7 +83,7 @@ uint32_t pwm_period(const TIM_TypeDef* instance, const uint32_t frequency_hz,
       std::max<uint64_t>(timer_clock_hz / frequency_hz, 1ULL);
   const auto prescaler_div = static_cast<uint64_t>(prescaler) + 1ULL;
   const auto max_period_ticks =
-      static_cast<uint64_t>(timer_auto_reload_max(instance));
+      static_cast<uint64_t>(timer_auto_reload_max(instance)) + 1ULL;
   const auto period_ticks = std::clamp<uint64_t>(
       target_period_ticks / prescaler_div, 1ULL, max_period_ticks);
   return static_cast<uint32_t>(period_ticks - 1ULL);
