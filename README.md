@@ -13,9 +13,9 @@ Prima di `add_subdirectory(lib/drivers)`:
 ```cmake
 set(DRIVERS_INSTANCE stm32u5xx)
 set(STM32_DEVICE STM32U585xx) # or STM32U545xx / STM32U595xx
-set(DRIVER_IDS_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/config/drivers/ids")
+set(DRIVER_IDS_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/config/lib/drivers/ids")
 set(DRIVERS_MAPPING_FILE
-    "${PROJECT_SOURCE_DIR}/config/drivers/mappings/stm32/stm32u5xx/<device>/mapping.hpp")
+    "${PROJECT_SOURCE_DIR}/config/lib/drivers/mappings/stm32/stm32u5xx/<device>/mapping.hpp")
 set(STM32CubeU5_ROOT "/percorso/STM32CubeU5" CACHE PATH "")
 set(STM32_EEPROM_EMULATION_ROOT "/percorso/stm32-util-eeprom-emulation" CACHE PATH "")
 add_subdirectory(lib/drivers)
